@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package proc
+package process
 
 import (
 	"sync"
 )
 
-type Proc struct {
+type Process struct {
 	Name string
 	Vrf  string
 	Args []string
 	File string
 }
 
-type ProcList map[string]*Proc
+type ProcessList map[string]*Process
 
 var (
-	ProcVrfMap = map[string]*ProcList{}
-	ProcMutex  sync.RWMutex
+	ProcessVrfMap = map[string]*ProcessList{}
+	ProcessMutex  sync.RWMutex
 )
 
-func NewProc(name string, vrf string, args ...string) *Proc {
-	proc := &Proc{
+func NewProcess(name string, vrf string, args ...string) *Process {
+	proc := &Process{
 		Name: name,
 		Vrf:  vrf,
 		Args: []string(args),
@@ -41,28 +41,28 @@ func NewProc(name string, vrf string, args ...string) *Proc {
 	return proc
 }
 
-func ProcRegister(proc *Proc) {
-	ProcMutex.Lock()
-	defer ProcMutex.Unlock()
+func ProcessRegister(proc *Process) {
+	ProcessMutex.Lock()
+	defer ProcessMutex.Unlock()
 }
 
-func ProcUnregister(proc *Proc) {
-	ProcMutex.Lock()
-	defer ProcMutex.Unlock()
+func ProcessUnregister(proc *Process) {
+	ProcessMutex.Lock()
+	defer ProcessMutex.Unlock()
 }
 
-func ProcUnregisterByCommand(name string) {
-	ProcMutex.Lock()
-	defer ProcMutex.Unlock()
+func ProcessUnregisterByCommand(name string) {
+	ProcessMutex.Lock()
+	defer ProcessMutex.Unlock()
 }
 
-func ProcUnregisterByVrf() {
-	ProcMutex.Lock()
-	defer ProcMutex.Unlock()
+func ProcessUnregisterByVrf() {
+	ProcessMutex.Lock()
+	defer ProcessMutex.Unlock()
 }
 
-func (proc *Proc) Start() {
+func (proc *Process) Start() {
 }
 
-func (proc *Proc) Stop() {
+func (proc *Process) Stop() {
 }

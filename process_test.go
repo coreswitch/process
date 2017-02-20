@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package proc
+package process
 
 import (
 	"testing"
 )
 
-func TestProcStart(t *testing.T) {
+func TestProcessStart(t *testing.T) {
 	args := []string{"-d", "-f"}
-	proc := NewProc("dhcp", "", args...)
-	ProcRegister(proc)
+	proc := NewProcess("dhcp", "", args...)
+	ProcessRegister(proc)
 }
