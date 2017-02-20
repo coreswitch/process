@@ -37,6 +37,7 @@ type Process struct {
 	Cmd        *exec.Cmd
 	StartTimer int
 	RetryTimer int
+	Index      int
 }
 
 type ProcessSlice []*Process
@@ -53,6 +54,7 @@ const (
 var (
 	ProcessList  = ProcessSlice{}
 	ProcessMutex sync.RWMutex
+	ProcessDebug bool = true
 )
 
 var ProcessStateStr = map[int]string{
@@ -74,22 +76,33 @@ func NewProcess(name string, args ...string) *Process {
 }
 
 func ProcessRegister(proc *Process) {
+	if ProcessDebug {
+		fmt.Println("[proc]ProcessRegister:", proc.Name)
+	}
 	ProcessMutex.Lock()
 	defer ProcessMutex.Unlock()
 
+	proc.Index = len(ProcessList)
 	ProcessList = append(ProcessList, proc)
 	proc.Start()
 }
 
 func ProcessUnregister(proc *Process) {
+	proc.Debug("Unregister", "function is called")
 	ProcessMutex.Lock()
 	defer ProcessMutex.Unlock()
 
 	proc.Stop()
 
+	index := 0
 	procList := ProcessSlice{}
 	for _, p := range ProcessList {
 		if p != proc {
+			if p.Index != index {
+				p.Debug("Unregister", fmt.Sprintf("Re-index %d -> %d", p.Index, index))
+			}
+			p.Index = index
+			index++
 			procList = append(procList, p)
 		}
 	}
@@ -103,17 +116,37 @@ func ProcessCount() int {
 	return len(ProcessList)
 }
 
+func ProcessLookup(index int) *Process {
+	if index < 0 {
+		if ProcessDebug {
+			fmt.Println("[proc]ProcessStart index is less than 0")
+		}
+		return nil
+	}
+	if len(ProcessList) < index+1 {
+		if ProcessDebug {
+			fmt.Println("[proc]ProcessStart index is out of range")
+		}
+		return nil
+	}
+	proc := ProcessList[index]
+	if proc == nil {
+		if ProcessDebug {
+			fmt.Println("[proc]ProcessStart process does not exists")
+		}
+		return nil
+	}
+	return proc
+}
+
 func ProcessStart(index int) {
+	if ProcessDebug {
+		fmt.Println("[proc]ProcessStart index", index)
+	}
 	ProcessMutex.Lock()
 	defer ProcessMutex.Unlock()
 
-	if index <= 0 {
-		return
-	}
-	if len(ProcessList) < index {
-		return
-	}
-	proc := ProcessList[index-1]
+	proc := ProcessLookup(index)
 	if proc == nil {
 		return
 	}
@@ -121,30 +154,38 @@ func ProcessStart(index int) {
 }
 
 func ProcessStop(index int) {
+	if ProcessDebug {
+		fmt.Println("[proc]ProcessStop index", index)
+	}
 	ProcessMutex.Lock()
 	defer ProcessMutex.Unlock()
 
-	if index <= 0 {
-		return
-	}
-	if len(ProcessList) < index {
-		return
-	}
-	proc := ProcessList[index-1]
+	proc := ProcessLookup(index)
 	if proc == nil {
 		return
 	}
 	proc.Stop()
 }
 
+func (proc *Process) Debug(funcName string, message string) {
+	if !ProcessDebug {
+		return
+	}
+	fmt.Printf("[proc]%s(%s:%d): %s\n", funcName, proc.Name, proc.Index, message)
+}
+
 func (proc *Process) Start() {
+	proc.Debug("Start", "function is called")
+
 	if proc.ExitFunc != nil {
+		proc.Debug("Start", "process already running, return at here")
 		return
 	}
 
 	proc.State = PROCESS_STOP
 	binary, err := exec.LookPath(proc.Name)
 	if err != nil {
+		proc.Debug("Start", "LookPath error, return at here")
 		proc.ErrLookup = err.Error()
 		return
 	}
@@ -159,6 +200,8 @@ func (proc *Process) Start() {
 
 		for {
 			proc.State = PROCESS_STARTING
+			proc.Debug("Start", "PROCESS_STARTING")
+
 			if proc.File != "" {
 				os.OpenFile(proc.File, os.O_RDWR|os.O_CREATE, 0644)
 			}
@@ -174,22 +217,37 @@ func (proc *Process) Start() {
 			proc.Cmd = cmd
 
 			if proc.StartTimer != 0 {
-				time.Sleep(time.Duration(proc.StartTimer) * time.Second)
+				proc.Debug("Start", fmt.Sprintf("StartTimer %d", proc.StartTimer))
+				startTimer := time.NewTimer(time.Duration(proc.StartTimer) * time.Second)
+				select {
+				case <-startTimer.C:
+					proc.Debug("Start", "StartTimer expired")
+				case <-done:
+					proc.Debug("Start", "Done during StartTimer")
+					startTimer.Stop()
+					return
+				}
 			}
 
-			// fmt.Println("process:", cmd.Path, cmd.Args)
+			proc.Debug("Start", fmt.Sprintf("%v %v", cmd.Path, cmd.Args))
 			err = cmd.Start()
 			if err != nil {
+				proc.Debug("Start", fmt.Sprintf("%s %v", "cmd.Start()", err))
 				proc.ErrStart = err.Error()
 			}
 
 			proc.State = PROCESS_RUNNING
+			proc.Debug("Start", "PROCESS_RUNNING")
+
 			err = cmd.Wait()
 			if err != nil {
+				proc.Debug("Start", fmt.Sprintf("%s %v", "cmd.Wait():", err))
 				proc.ErrWait = err.Error()
 			}
 
 			proc.State = PROCESS_RETRY
+			proc.Debug("Start", "PROCESS_RETRY")
+
 			retryTimer := time.NewTimer(time.Duration(proc.RetryTimer) * time.Second)
 			select {
 			case <-retryTimer.C:
@@ -202,15 +260,18 @@ func (proc *Process) Start() {
 
 	proc.ExitFunc = func() {
 		proc.State = PROCESS_EXIT_CALLED
+		proc.Debug("ExitFunc", "PROCESS_EXIT_CALLED")
 		close(done)
 		cancel()
 		proc.State = PROCESS_STOP_WAIT
 		wg.Wait()
 		proc.State = PROCESS_STOP
+		proc.Debug("ExitFunc", "PROCESS_STOP")
 	}
 }
 
 func (proc *Process) Stop() {
+	proc.Debug("Stop", "function is called")
 	if proc.ExitFunc != nil {
 		proc.ExitFunc()
 		proc.ExitFunc = nil
@@ -220,7 +281,7 @@ func (proc *Process) Stop() {
 func ProcessListShow() string {
 	str := ""
 	for pos, proc := range ProcessList {
-		str += fmt.Sprintf("%d %s", pos+1, proc.Name)
+		str += fmt.Sprintf("%d %s", pos, proc.Name)
 		if proc.Vrf != "" {
 			str += fmt.Sprintf("@%s", proc.Vrf)
 		}
