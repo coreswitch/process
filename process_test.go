@@ -15,11 +15,24 @@
 package process
 
 import (
+	"fmt"
 	"testing"
 )
 
 func TestProcessStart(t *testing.T) {
 	args := []string{"-d", "-f"}
-	proc := NewProcess("dhcp", "", args...)
-	ProcessRegister(proc)
+	proc1 := NewProcess("dhcp", args...)
+	ProcessRegister(proc1)
+	proc2 := NewProcess("dhcp", args...)
+	ProcessRegister(proc2)
+	fmt.Println(ProcessCount())
+
+	ProcessUnregister(proc2)
+	fmt.Println(ProcessCount())
+	proc3 := NewProcess("dhcp", args...)
+	ProcessUnregister(proc3)
+	fmt.Println(ProcessCount())
+
+	ProcessUnregister(proc1)
+	fmt.Println(ProcessCount())
 }
