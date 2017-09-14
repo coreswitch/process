@@ -16,8 +16,10 @@ package process
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,19 +27,20 @@ import (
 )
 
 type Process struct {
-	Name       string
-	Vrf        string
-	Args       []string
-	File       string
-	ErrLookup  string
-	ErrStart   string
-	ErrWait    string
-	ExitFunc   func()
-	State      int
-	Cmd        *exec.Cmd
-	StartTimer int
-	RetryTimer int
-	Index      int
+	Name        string
+	Vrf         string
+	Args        []string
+	File        string
+	ErrLookup   string
+	ErrStart    string
+	ErrWait     string
+	ExitFunc    func()
+	State       int
+	Cmd         *exec.Cmd
+	StartTimer  int
+	RetryTimer  int
+	Index       int
+	KillPidFile string
 }
 
 type ProcessSlice []*Process
@@ -267,6 +270,15 @@ func (proc *Process) Start() {
 		wg.Wait()
 		proc.State = PROCESS_STOP
 		proc.Debug("ExitFunc", "PROCESS_STOP")
+		if proc.KillPidFile != "" {
+			byte, err := ioutil.ReadFile(proc.KillPidFile)
+			if err != nil {
+				proc.Debug("ExitFunc", err.Error())
+			}
+			pid := strings.TrimSpace(string(byte))
+			exec.Command("kill", "-s", "TERM", pid).Run()
+			proc.Debug("ExitFunc", "KillPidFile:"+pid)
+		}
 	}
 }
 
