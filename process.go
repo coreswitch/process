@@ -30,6 +30,7 @@ type Process struct {
 	Name        string
 	Vrf         string
 	Args        []string
+	Env         map[string]string
 	File        string
 	ErrLookup   string
 	ErrStart    string
@@ -73,6 +74,7 @@ func NewProcess(name string, args ...string) *Process {
 	proc := &Process{
 		Name:       name,
 		Args:       []string(args),
+		Env:        make(map[string]string),
 		RetryTimer: 1,
 	}
 	return proc
@@ -177,6 +179,23 @@ func (proc *Process) Debug(funcName string, message string) {
 	fmt.Printf("[proc]%s(%s:%d): %s\n", funcName, proc.Name, proc.Index, message)
 }
 
+func (proc *Process) setEnv() {
+	if proc.Cmd == nil {
+		proc.Debug("setEnv", "proc.Cmd == nil")
+		return
+	}
+	env := os.Environ()
+	if proc.Vrf != "" {
+		env = append(env, fmt.Sprintf("VRF=%s", proc.Vrf))
+		env = append(env, "LD_PRELOAD=/usr/bin/vrf_socket.so")
+	}
+	for key, val := range proc.Env {
+		proc.Debug("Start", fmt.Sprintf("environment: %s=%s", key, val))
+		env = append(env, fmt.Sprintf("%s=%s", key, val))
+	}
+	proc.Cmd.Env = env
+}
+
 func (proc *Process) Start() {
 	proc.Debug("Start", "function is called")
 
@@ -210,15 +229,8 @@ func (proc *Process) Start() {
 			}
 
 			cmd := exec.CommandContext(ctx, binary, proc.Args...)
-
-			env := os.Environ()
-			if proc.Vrf != "" {
-				env = append(env, fmt.Sprintf("VRF=%s", proc.Vrf))
-				env = append(env, "LD_PRELOAD=/usr/bin/vrf_socket.so")
-			}
-			cmd.Env = env
 			proc.Cmd = cmd
-
+			proc.setEnv()
 			if proc.StartTimer != 0 {
 				proc.Debug("Start", fmt.Sprintf("StartTimer %d", proc.StartTimer))
 				startTimer := time.NewTimer(time.Duration(proc.StartTimer) * time.Second)
@@ -288,6 +300,14 @@ func (proc *Process) Stop() {
 		proc.ExitFunc()
 		proc.ExitFunc = nil
 	}
+}
+
+func (proc *Process) AddEnv(key, val string) {
+	proc.Env[key] = val
+}
+
+func (proc *Process) DelEnv(key string) {
+	delete(proc.Env, key)
 }
 
 func ProcessListShow() string {
